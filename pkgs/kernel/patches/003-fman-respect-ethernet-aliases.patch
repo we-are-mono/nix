@@ -1,0 +1,155 @@
+From: Tomaz Zaman <tomaz@mono.si>
+Subject: [PATCH] net: sdk_dpaa: order interface registration by device tree alias
+
+The SDK DPAA ethernet driver registers interfaces in device tree probe
+order, which causes ifindex values to not match the ethX numbering based
+on device tree aliases. For example, eth0 might get ifindex 3 while eth2
+gets ifindex 2.
+
+Fix this by deferring register_netdev() calls until all devices have
+probed, then sorting by ethernet alias and registering in order. This
+ensures eth0 gets ifindex 2, eth1 gets ifindex 3, etc.
+
+Also use of_alias_get_id() to set interface names based on device tree
+aliases for predictable naming regardless of probe order.
+
+Sysfs initialization is also deferred to run after register_netdev()
+completes, preventing warnings about creating sysfs files on unregistered
+devices.
+
+Upstream-Status: Inappropriate [NXP SDK driver]
+Signed-off-by: Tomaz Zaman <tomaz@mono.si>
+---
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth.c
+index 3b7a20e924d9..696afe17afa0 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth.c
+@@ -1122,11 +1122,16 @@ dpaa_eth_priv_probe(struct platform_device *_of_dev)
+ 
+ 	err = dpa_private_netdev_init(net_dev);
+ 
+-	dpa_priv_bp_seed(net_dev);
+-
+ 	if (err < 0)
+ 		goto netdev_init_failed;
+ 
++	/* Seed buffer pools (safe to do before registration) */
++	dpa_priv_bp_seed(net_dev);
++
++	/* err > 0 means registration was deferred - sysfs will be init later */
++	if (err > 0)
++		return 0;
++
+ 	dpaa_eth_sysfs_init(&net_dev->dev);
+ 
+ #ifdef CONFIG_PM
+diff --git a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.c b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.c
+index b7a9536070cf..04f2c0dfad11 100644
+--- a/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.c
++++ b/drivers/net/ethernet/freescale/sdk_dpaa/dpaa_eth_common.c
+@@ -39,6 +39,7 @@
+ #include <linux/percpu.h>
+ #include <linux/highmem.h>
+ #include <linux/sort.h>
++#include <linux/list_sort.h>
+ #include <linux/fsl_qman.h>
+ #include <linux/ip.h>
+ #include <linux/ipv6.h>
+@@ -53,6 +54,58 @@
+ #endif /* CONFIG_FSL_DPAA_DBG_LOOP */
+ #include "mac.h"
+ 
++/* Deferred registration for ifindex ordering by ethernet alias.
++ * Devices are collected during probe and registered in sorted order
++ * via late_initcall to ensure eth0 gets ifindex 2, eth1 gets 3, etc.
++ */
++struct dpa_pending_netdev {
++	struct list_head list;
++	struct net_device *net_dev;
++	int eth_alias;
++};
++
++static LIST_HEAD(dpa_pending_list);
++static DEFINE_MUTEX(dpa_pending_mutex);
++static bool dpa_pending_registered;
++
++static int dpa_pending_cmp(void *priv, const struct list_head *a,
++			   const struct list_head *b)
++{
++	struct dpa_pending_netdev *pa = list_entry(a, struct dpa_pending_netdev, list);
++	struct dpa_pending_netdev *pb = list_entry(b, struct dpa_pending_netdev, list);
++	return pa->eth_alias - pb->eth_alias;
++}
++
++static int __init dpa_register_pending_netdevs(void)
++{
++	struct dpa_pending_netdev *pending, *tmp;
++	int err;
++
++	mutex_lock(&dpa_pending_mutex);
++	dpa_pending_registered = true;
++
++	/* Sort by ethernet alias */
++	list_sort(NULL, &dpa_pending_list, dpa_pending_cmp);
++
++	/* Register in sorted order and initialize sysfs */
++	list_for_each_entry_safe(pending, tmp, &dpa_pending_list, list) {
++		err = register_netdev(pending->net_dev);
++		if (err) {
++			pr_err("register_netdev(%s) = %d\n",
++			       pending->net_dev->name, err);
++		} else {
++			/* Init sysfs after successful registration */
++			dpaa_eth_sysfs_init(&pending->net_dev->dev);
++		}
++		list_del(&pending->list);
++		kfree(pending);
++	}
++
++	mutex_unlock(&dpa_pending_mutex);
++	return 0;
++}
++late_initcall(dpa_register_pending_netdevs);
++
+ /* Size in bytes of the FQ taildrop threshold */
+ #define DPA_FQ_TD		0x200000
+ 
+@@ -103,6 +156,7 @@ int dpa_netdev_init(struct net_device *net_dev,
+ 	int err;
+ 	struct dpa_priv_s *priv = netdev_priv(net_dev);
+ 	struct device *dev = net_dev->dev.parent;
++	int eth_alias;
+ 
+ 	net_dev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
+ 
+@@ -117,6 +171,30 @@ int dpa_netdev_init(struct net_device *net_dev,
+ 	net_dev->needed_headroom = priv->tx_headroom;
+ 	net_dev->watchdog_timeo = msecs_to_jiffies(tx_timeout);
+ 
++	/* Get ethernet alias for interface naming and sorted registration */
++	eth_alias = of_alias_get_id(priv->mac_dev->dev->of_node, "ethernet");
++	if (eth_alias >= 0)
++		snprintf(net_dev->name, IFNAMSIZ, "eth%d", eth_alias);
++
++	/* Defer registration to late_initcall for sorted ifindex assignment */
++	mutex_lock(&dpa_pending_mutex);
++	if (!dpa_pending_registered) {
++		struct dpa_pending_netdev *pending;
++
++		pending = kzalloc(sizeof(*pending), GFP_KERNEL);
++		if (!pending) {
++			mutex_unlock(&dpa_pending_mutex);
++			return -ENOMEM;
++		}
++		pending->net_dev = net_dev;
++		pending->eth_alias = (eth_alias >= 0) ? eth_alias : INT_MAX;
++		list_add_tail(&pending->list, &dpa_pending_list);
++		mutex_unlock(&dpa_pending_mutex);
++		return 1;  /* Positive return = deferred, caller should not continue */
++	}
++	mutex_unlock(&dpa_pending_mutex);
++
++	/* If late_initcall already ran, register immediately */
+ 	err = register_netdev(net_dev);
+ 	if (err < 0) {
+ 		dev_err(dev, "register_netdev() = %d\n", err);
