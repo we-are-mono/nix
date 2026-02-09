@@ -69,6 +69,12 @@
         ];
       };
 
+      # Basic build checks (run with: nix flake check)
+      checks.x86_64-linux = {
+        # Verify the NixOS configuration evaluates without errors
+        gatewayToplevel = self.nixosConfigurations.gateway.config.system.build.toplevel;
+      };
+
       # Individual packages (cross-compiled from x86_64)
       packages.aarch64-linux = {
         kernel = crossPkgs.mono-gateway-kernel;

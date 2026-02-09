@@ -97,6 +97,27 @@ pkgs/
 
 Cross-compilation is the default: builds on x86_64, targets aarch64. A `gateway-native` NixOS configuration is also available for on-device builds.
 
+## eMMC Layout
+
+The 32 GB eMMC is split into a 32 MB firmware region and a single ext4 rootfs partition. NixOS only touches the rootfs partition — firmware is flashed separately via the Yocto build.
+
+```
+Offset      Size    Contents
+────────────────────────────────────────────────
+0x000000    512 B   MBR (partition table)
+0x001000    ~1 MB   RCW + BL2 (starts at 4 KB for eMMC)
+0x100000    2 MB    ATF FIP (BL31 + U-Boot)
+0x300000    1 MB    U-Boot environment
+0x400000    1 MB    FMan microcode (ASK — do NOT overwrite)
+0x500000    1 MB    Device tree (DTB)
+0xA00000    ~22 MB  Recovery kernel + initramfs
+────────────────────────────────────────────────
+0x2000000   ~32 GB  ext4 rootfs partition (/dev/mmcblk0p1)
+            (sector 65536 = 32 MB offset)
+```
+
+**Warning:** `dd if=image of=/dev/mmcblk0p1` writes to the rootfs partition (safe). `dd if=image of=/dev/mmcblk0` writes to the raw device starting at offset 0 — this will destroy firmware and brick the board.
+
 ## Boot Flow
 
 ```

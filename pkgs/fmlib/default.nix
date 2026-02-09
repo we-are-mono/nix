@@ -18,20 +18,19 @@ stdenv.mkDerivation {
     ./01-mono-ask-extensions.patch
   ];
 
-  makeFlags = [
-    "libfm-arm.a"
-    "CROSS_COMPILE=${stdenv.cc.targetPrefix}"
-    "KERNEL_SRC=${kernel.dev}/lib/modules/${kernel.modDirVersion}/source"
-  ];
+  env = {
+    CROSS_COMPILE = stdenv.cc.targetPrefix;
+    KERNEL_SRC = "${kernel.dev}/lib/modules/${kernel.modDirVersion}/source";
+  };
+
+  makeFlags = [ "libfm-arm.a" ];
 
   installPhase = ''
     runHook preInstall
     make install-libfm-arm \
       DESTDIR=$out \
       PREFIX=/ \
-      LIB_DEST_DIR=/lib \
-      CROSS_COMPILE=${stdenv.cc.targetPrefix} \
-      KERNEL_SRC=${kernel.dev}/lib/modules/${kernel.modDirVersion}/source
+      LIB_DEST_DIR=/lib
     rm -rf $out/usr/src
     runHook postInstall
   '';

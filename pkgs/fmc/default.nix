@@ -13,11 +13,7 @@ stdenv.mkDerivation {
 
   # Convert CRLF to LF before patching (upstream has Windows line endings)
   prePatch = ''
-    for f in source/*.cpp source/*.h source/spa/*.c source/spa/*.h; do
-      if [ -f "$f" ]; then
-        sed -i 's/\r$//' "$f"
-      fi
-    done
+    find source -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.c' \) -exec sed -i 's/\r$//' {} +
   '';
 
   patches = [
@@ -55,6 +51,6 @@ stdenv.mkDerivation {
   meta = {
     description = "NXP Frame Manager Configuration tool";
     platforms = [ "aarch64-linux" ];
-    license = lib.licenses.mit;
+    license = lib.licenses.bsd3;
   };
 }

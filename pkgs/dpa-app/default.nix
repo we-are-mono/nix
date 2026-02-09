@@ -51,7 +51,7 @@ stdenv.mkDerivation {
     runHook preBuild
     make CC="${stdenv.cc.targetPrefix}cc" \
       CFLAGS="$NIX_CFLAGS_COMPILE" \
-      LDFLAGS="-L${mono-gateway-fmc}/lib -L${mono-gateway-fmlib}/lib -L${mono-gateway-libcli}/lib -lfmc -lfm-arm -lstdc++ -lxml2 -lpthread -lcli"
+      LDFLAGS="-L${mono-gateway-fmc}/lib -L${mono-gateway-fmlib}/lib -L${mono-gateway-libcli}/lib -Wl,--as-needed -lfmc -lfm-arm -lstdc++ -lxml2 -lpthread -lcli"
     runHook postBuild
   '';
 

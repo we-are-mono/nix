@@ -1,5 +1,8 @@
 { config, lib, pkgs, ... }:
 
+let
+  conntrackMax = 131072;
+in
 {
   # --- Boot ---
   boot.loader.generic-extlinux-compatible.enable = true;
@@ -53,7 +56,7 @@
     "net.ipv4.ip_forward" = 1;
     "net.netfilter.nf_conntrack_acct" = 1;
     "net.netfilter.nf_conntrack_checksum" = 0;
-    "net.netfilter.nf_conntrack_max" = 131072;
+    "net.netfilter.nf_conntrack_max" = conntrackMax;
     "net.netfilter.nf_conntrack_tcp_timeout_established" = 7440;
     "net.netfilter.nf_conntrack_udp_timeout" = 60;
     "net.netfilter.nf_conntrack_udp_timeout_stream" = 180;
@@ -62,13 +65,13 @@
     "vm.dirty_expire_centisecs" = 6000;
   };
 
-  # --- SSH ---
+  # --- SSH (key-only, no password auth) ---
   services.openssh.enable = true;
-  services.openssh.settings.PermitRootLogin = "yes";
-  services.openssh.settings.PermitEmptyPasswords = "yes";
+  services.openssh.settings.PermitRootLogin = "prohibit-password";
+  services.openssh.settings.PasswordAuthentication = false;
 
   # --- Users ---
-  users.users.root.initialHashedPassword = "";
+  users.users.root.initialHashedPassword = "";  # empty password for serial console (physical access = trusted)
 
   # --- Out-of-tree kernel modules ---
   boot.extraModulePackages = [
@@ -125,7 +128,7 @@
     serviceConfig = {
       Type = "forking";
       ExecStartPre = "-/bin/sh -c 'test -e /sys/class/vwd/vwd0/vwd_fast_path_enable && echo 1 > /sys/class/vwd/vwd0/vwd_fast_path_enable'";
-      ExecStart = "${pkgs.mono-gateway-cmm}/bin/cmm -f /etc/config/fastforward -n 131072";
+      ExecStart = "${pkgs.mono-gateway-cmm}/bin/cmm -f /etc/config/fastforward -n ${toString conntrackMax}";
       ExecStopPost = "-/bin/sh -c 'test -e /sys/class/vwd/vwd0/vwd_fast_path_enable && echo 0 > /sys/class/vwd/vwd0/vwd_fast_path_enable'";
       Restart = "on-failure";
       RestartSec = 5;
