@@ -33,11 +33,13 @@ nix build .#packages.aarch64-linux.dpa-app
 
 ## Flashing
 
-The rootfs image goes on eMMC partition 1. Firmware partitions (RCW, ATF, U-Boot, FMan microcode) at offsets 0-10 MB are separate and managed by the existing Yocto build.
+The rootfs image goes on eMMC partition 1. Firmware partitions (RCW, ATF, U-Boot, FMan microcode) at offsets 0-10 MB are separate and managed by the existing Yocto build. In Recovery linux, run these:
 
 ```bash
-dd if=result of=/dev/mmcblk0p1 bs=4M conv=fsync
-resize2fs /dev/mmcblk0p1
+ip link set eth0 up; ip addr add 10.0.0.199/24 dev eth0; ip route add default via 10.0.0.1 dev eth0 # modify iface and ip
+curl -O http://ip-of-your-build-server:8000/result
+dd if=result of=/dev/mmcblk0p1 bs=1M
+reboot
 ```
 
 ## U-Boot Setup (one-time)

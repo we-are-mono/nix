@@ -32,7 +32,13 @@
   };
 
   # --- Serial console ---
-  systemd.services."serial-getty@ttyS0".enable = true;
+  systemd.services."serial-getty@ttyS0" = {
+    enable = true;
+    serviceConfig.ExecStart = [
+      ""  # clear the default
+      "@${pkgs.util-linux}/sbin/agetty agetty --autologin root --noclear 115200 ttyS0 vt100"
+    ];
+  };
 
   # --- Networking ---
   networking.hostName = "gateway";
@@ -83,6 +89,9 @@
     pkgs.mono-gateway-fmc
     pkgs.mono-gateway-status-led
     pkgs.lm_sensors
+    pkgs.htop
+    pkgs.vim
+    pkgs.xterm  # provides 'resize' for serial console auto-sizing
     pkgs.mono-gateway-dpa-app
     pkgs.mono-gateway-cmm
   ];
@@ -118,6 +127,14 @@
   # --- Fancontrol ---
   hardware.fancontrol.enable = true;
   hardware.fancontrol.config = builtins.readFile ../pkgs/fancontrol/fancontrol.conf;
+
+  # --- Shell: auto-detect terminal size on serial console ---
+  programs.bash.loginShellInit = ''
+    [ "$TERM" != "dumb" ] && eval "$(resize)" 2>/dev/null
+  '';
+
+  # --- Nix ---
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   # --- Minimization ---
   documentation.enable = false;
