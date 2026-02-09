@@ -24,6 +24,10 @@
     vim
     xterm  # provides 'resize' for serial console auto-sizing
     tcpdump
+    ethtool
+    conntrack-tools
+    iperf3
+    mtr
   ];
 
   # --- Nix ---
