@@ -44,6 +44,17 @@
   networking.hostName = "gateway";
   networking.nftables.enable = true;  # native nftables (xt_LOG removed in 6.x kernel)
 
+  # --- Gateway sysctl tuning (from Yocto 11-nf-conntrack.conf + 01-ip-forward.conf) ---
+  boot.kernel.sysctl = {
+    "net.ipv4.ip_forward" = 1;
+    "net.netfilter.nf_conntrack_acct" = 1;
+    "net.netfilter.nf_conntrack_checksum" = 0;
+    "net.netfilter.nf_conntrack_max" = 131072;
+    "net.netfilter.nf_conntrack_tcp_timeout_established" = 7440;
+    "net.netfilter.nf_conntrack_udp_timeout" = 60;
+    "net.netfilter.nf_conntrack_udp_timeout_stream" = 180;
+  };
+
   # --- SSH ---
   services.openssh.enable = true;
   services.openssh.settings.PermitRootLogin = "yes";
@@ -133,6 +144,19 @@
   programs.bash.loginShellInit = ''
     [ "$TERM" != "dumb" ] && eval "$(resize)" 2>/dev/null
   '';
+
+  # --- NTP ---
+  services.timesyncd.enable = true;
+
+  # --- Journal size limits (embedded storage) ---
+  services.journald.extraConfig = ''
+    SystemMaxUse=100M
+    RuntimeMaxUse=50M
+  '';
+
+  # --- Watchdog ---
+  systemd.watchdog.runtimeTime = "30s";
+  systemd.watchdog.rebootTime = "60s";
 
   # --- Nix ---
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
