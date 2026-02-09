@@ -71,12 +71,42 @@ saveenv
 | CMM | Connection Manager Module daemon for ASK fast path |
 | dpa-app | DPA App for FMan offload management (called by CDX) |
 
+## Updating Over SSH
+
+After the initial `dd` flash, subsequent updates can be deployed incrementally over SSH — no full reflash needed.
+
+**Prerequisites:** Copy your SSH public key to the device (via serial console):
+```bash
+mkdir -p ~/.ssh && echo 'ssh-ed25519 AAAA...' >> ~/.ssh/authorized_keys
+```
+
+**Deploy from build machine:**
+```bash
+# Build locally (cross-compiled), copy to device, activate:
+nixos-rebuild switch --flake .#gateway \
+  --target-host root@gateway --build-host localhost
+
+# Rollback to previous generation:
+ssh root@gateway nixos-rebuild switch --rollback
+```
+
+**Alternative two-step approach** (more control):
+```bash
+nix build .#nixosConfigurations.gateway.config.system.build.toplevel -L
+nix copy --to ssh://root@gateway ./result
+ssh root@gateway "$(readlink -f ./result)/bin/switch-to-configuration switch"
+```
+
 ## Architecture
 
 ```
-flake.nix                  # Entry point, overlay, NixOS configs
-configurations/gateway.nix # NixOS system configuration
-image/default.nix          # ext4 rootfs image builder
+flake.nix                    # Entry point, overlay, NixOS configs
+configurations/gateway.nix   # Top-level profile (imports modules)
+modules/
+  hardware.nix               # Board hardware: kernel, DTB, eMMC, serial, fancontrol
+  networking.nix              # Networking, firewall, SSH, NTP
+  ask-offload.nix            # ASK fast path (NixOS module with options)
+image/default.nix            # ext4 rootfs image builder
 pkgs/
   kernel/                  # Patched NXP kernel + DTS + defconfig
     sdk-headers.nix        # FMan SDK driver headers (from patched kernel source)

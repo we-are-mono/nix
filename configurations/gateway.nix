@@ -1,175 +1,30 @@
 { config, lib, pkgs, ... }:
 
-let
-  conntrackMax = 131072;
-in
 {
-  # --- Boot ---
-  boot.loader.generic-extlinux-compatible.enable = true;
-  boot.loader.grub.enable = false;
-  boot.kernelPackages = pkgs.linuxPackagesFor pkgs.mono-gateway-kernel;
-  boot.kernelParams = [
-    "console=ttyS0,115200"
-    "earlycon=uart8250,mmio,0x21c0500"
+  imports = [
+    ../modules/hardware.nix
+    ../modules/networking.nix
+    ../modules/ask-offload.nix
   ];
 
-  # Embedded board: all boot-critical drivers are built-in, no default x86 modules
-  boot.initrd.includeDefaultModules = false;
-  boot.initrd.availableKernelModules = [ ];
-
-  # Grow root filesystem to fill eMMC partition on first boot
-  boot.initrd.extraUtilsCommands = ''
-    copy_bin_and_libs ${pkgs.e2fsprogs}/sbin/resize2fs
-  '';
-  boot.initrd.postMountCommands = ''
-    resize2fs /dev/mmcblk0p1 || true
-  '';
-
-  # Explicit DTB for extlinux.conf FDT entry
-  hardware.deviceTree.name = "freescale/mono-gateway-dk-sdk.dtb";
-
-  # --- Filesystems ---
-  fileSystems."/" = {
-    device = "/dev/mmcblk0p1";
-    fsType = "ext4";
-    options = [
-      "noatime"    # no access-time writes — biggest single win for eMMC
-      "commit=60"  # flush journal every 60s instead of 5s — coalesces writes
-    ];
-  };
-
-  # --- Serial console ---
-  systemd.services."serial-getty@ttyS0" = {
-    enable = true;
-    serviceConfig.ExecStart = [
-      ""  # clear the default
-      "@${pkgs.util-linux}/sbin/agetty agetty --autologin root --noclear 115200 ttyS0 vt100"
-    ];
-  };
-
-  # --- Networking ---
-  networking.hostName = "gateway";
-  networking.nftables.enable = true;  # native nftables (xt_LOG removed in 6.x kernel)
-
-  # --- Gateway sysctl tuning (from Yocto 11-nf-conntrack.conf + 01-ip-forward.conf) ---
-  boot.kernel.sysctl = {
-    "net.ipv4.ip_forward" = 1;
-    "net.netfilter.nf_conntrack_acct" = 1;
-    "net.netfilter.nf_conntrack_checksum" = 0;
-    "net.netfilter.nf_conntrack_max" = conntrackMax;
-    "net.netfilter.nf_conntrack_tcp_timeout_established" = 7440;
-    "net.netfilter.nf_conntrack_udp_timeout" = 60;
-    "net.netfilter.nf_conntrack_udp_timeout_stream" = 180;
-    # eMMC wear reduction: coalesce dirty page writeback to every 60s
-    "vm.dirty_writeback_centisecs" = 6000;
-    "vm.dirty_expire_centisecs" = 6000;
-  };
-
-  # --- SSH (key-only, no password auth) ---
-  services.openssh.enable = true;
-  services.openssh.settings.PermitRootLogin = "prohibit-password";
-  services.openssh.settings.PasswordAuthentication = false;
+  # --- ASK fast path ---
+  mono-gateway.ask.enable = true;
 
   # --- Users ---
   users.users.root.initialHashedPassword = "";  # empty password for serial console (physical access = trusted)
-
-  # --- Out-of-tree kernel modules ---
-  boot.extraModulePackages = [
-    pkgs.mono-gateway-sfp-led
-    pkgs.mono-gateway-lp5812-driver
-    pkgs.mono-gateway-auto-bridge
-    pkgs.mono-gateway-cdx
-    pkgs.mono-gateway-fci
+  users.users.root.openssh.authorizedKeys.keys = [
+    # Managed manually on the device (~/.ssh/authorized_keys)
   ];
-
-  # --- ASK fast path module loading ---
-  # auto_bridge has no dependencies, load early
-  boot.kernelModules = [ "auto_bridge" ];
-
-  # CDX and FCI loaded via systemd for proper ordering and retry.
-  # CDX calls dpa_app as a usermode helper, which needs /etc/*.xml config files
-  # to be present (created by environment.etc / systemd-tmpfiles).
-  systemd.services.load-ask-modules = {
-    description = "Load ASK Fast Path Kernel Modules (CDX + FCI)";
-    after = [ "systemd-tmpfiles-setup.service" ];
-    wants = [ "systemd-tmpfiles-setup.service" ];
-    wantedBy = [ "multi-user.target" ];
-    before = [ "cmm.service" ];
-    unitConfig.ConditionPathIsDirectory = "/sys/bus/fsl-mc";
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = [
-        "${pkgs.kmod}/bin/modprobe cdx"
-        "${pkgs.kmod}/bin/modprobe fci"
-      ];
-    };
-  };
 
   # --- Userspace packages ---
-  environment.systemPackages = [
-    pkgs.mono-gateway-fmc
-    pkgs.mono-gateway-status-led
-    pkgs.lm_sensors
-    pkgs.htop
-    pkgs.vim
-    pkgs.xterm  # provides 'resize' for serial console auto-sizing
-    pkgs.mono-gateway-dpa-app
-    pkgs.mono-gateway-cmm
+  environment.systemPackages = with pkgs; [
+    mono-gateway-status-led
+    lm_sensors
+    htop
+    vim
+    xterm  # provides 'resize' for serial console auto-sizing
+    tcpdump
   ];
-
-  # --- CMM fast path daemon ---
-  systemd.services.cmm = {
-    description = "CMM Connection Management Module for ASK Fast Path";
-    after = [ "network.target" "load-ask-modules.service" ];
-    wants = [ "load-ask-modules.service" ];
-    wantedBy = [ "multi-user.target" ];
-    unitConfig.ConditionPathExists = "/dev/cdx_ctrl";
-    serviceConfig = {
-      Type = "forking";
-      ExecStartPre = "-/bin/sh -c 'test -e /sys/class/vwd/vwd0/vwd_fast_path_enable && echo 1 > /sys/class/vwd/vwd0/vwd_fast_path_enable'";
-      ExecStart = "${pkgs.mono-gateway-cmm}/bin/cmm -f /etc/config/fastforward -n ${toString conntrackMax}";
-      ExecStopPost = "-/bin/sh -c 'test -e /sys/class/vwd/vwd0/vwd_fast_path_enable && echo 0 > /sys/class/vwd/vwd0/vwd_fast_path_enable'";
-      Restart = "on-failure";
-      RestartSec = 5;
-    };
-  };
-
-  # --- DPA-App config files (dpa_app expects these at /etc/) ---
-  environment.etc."cdx_cfg.xml".source = "${pkgs.mono-gateway-dpa-app}/etc/cdx_cfg.xml";
-  environment.etc."cdx_pcd.xml".source = "${pkgs.mono-gateway-dpa-app}/etc/cdx_pcd.xml";
-  environment.etc."cdx_sp.xml".source = "${pkgs.mono-gateway-dpa-app}/etc/cdx_sp.xml";
-
-  # --- FMC PDL config (dpa_app expects at /etc/fmc/config/) ---
-  environment.etc."fmc/config/hxs_pdl_v3.xml".source = "${pkgs.mono-gateway-fmc}/etc/fmc/config/hxs_pdl_v3.xml";
-
-  # --- CMM fastforward config ---
-  environment.etc."config/fastforward".source = ../pkgs/cmm/fastforward;
-
-  # --- Fancontrol ---
-  hardware.fancontrol.enable = true;
-  hardware.fancontrol.config = builtins.readFile ../pkgs/fancontrol/fancontrol.conf;
-
-  # --- Shell: auto-detect terminal size on serial console ---
-  programs.bash.loginShellInit = ''
-    [ "$TERM" != "dumb" ] && eval "$(resize)" 2>/dev/null
-  '';
-
-  # --- Periodic TRIM for eMMC wear leveling ---
-  services.fstrim.enable = true;
-
-  # --- NTP ---
-  services.timesyncd.enable = true;
-
-  # --- Journal: volatile only (RAM) to avoid eMMC writes ---
-  services.journald.extraConfig = ''
-    Storage=volatile
-    RuntimeMaxUse=50M
-  '';
-
-  # --- Watchdog ---
-  systemd.settings.Manager.RuntimeWatchdogSec = "30s";
-  systemd.settings.Manager.RebootWatchdogSec = "60s";
 
   # --- Nix ---
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
