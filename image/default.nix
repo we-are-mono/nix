@@ -10,7 +10,7 @@ in
       storePaths = [ toplevel ];
       compressImage = false;
       volumeLabel = "NIXOS_ROOT";
-      uuid = "44444444-4444-4444-8888-888888888888";
+      uuid = "39e0cc49-d11a-4e30-a782-8baf2fd64ed7";
       populateImageCommands = ''
         mkdir -p files/boot
         ${config.boot.loader.generic-extlinux-compatible.populateCmd} \
