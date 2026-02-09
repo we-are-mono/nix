@@ -29,6 +29,10 @@
   fileSystems."/" = {
     device = "/dev/mmcblk0p1";
     fsType = "ext4";
+    options = [
+      "noatime"    # no access-time writes — biggest single win for eMMC
+      "commit=60"  # flush journal every 60s instead of 5s — coalesces writes
+    ];
   };
 
   # --- Serial console ---
@@ -53,6 +57,9 @@
     "net.netfilter.nf_conntrack_tcp_timeout_established" = 7440;
     "net.netfilter.nf_conntrack_udp_timeout" = 60;
     "net.netfilter.nf_conntrack_udp_timeout_stream" = 180;
+    # eMMC wear reduction: coalesce dirty page writeback to every 60s
+    "vm.dirty_writeback_centisecs" = 6000;
+    "vm.dirty_expire_centisecs" = 6000;
   };
 
   # --- SSH ---
@@ -145,18 +152,21 @@
     [ "$TERM" != "dumb" ] && eval "$(resize)" 2>/dev/null
   '';
 
+  # --- Periodic TRIM for eMMC wear leveling ---
+  services.fstrim.enable = true;
+
   # --- NTP ---
   services.timesyncd.enable = true;
 
-  # --- Journal size limits (embedded storage) ---
+  # --- Journal: volatile only (RAM) to avoid eMMC writes ---
   services.journald.extraConfig = ''
-    SystemMaxUse=100M
+    Storage=volatile
     RuntimeMaxUse=50M
   '';
 
   # --- Watchdog ---
-  systemd.watchdog.runtimeTime = "30s";
-  systemd.watchdog.rebootTime = "60s";
+  systemd.settings.Manager.RuntimeWatchdogSec = "30s";
+  systemd.settings.Manager.RebootWatchdogSec = "60s";
 
   # --- Nix ---
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
