@@ -42,6 +42,7 @@
 
   # --- Networking ---
   networking.hostName = "gateway";
+  networking.nftables.enable = true;  # native nftables (xt_LOG removed in 6.x kernel)
 
   # --- SSH ---
   services.openssh.enable = true;
