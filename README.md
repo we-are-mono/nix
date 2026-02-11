@@ -56,7 +56,7 @@ saveenv
 
 | Component | Description |
 |-----------|-------------|
-| Kernel | NXP LS1046A patched kernel (6.12.49) with ASK/DPAA/CAAM/FMan support |
+| Kernel | NXP LS1046A patched kernel (6.12.49) with ASK/DPAA/CAAM/FMan support ([patch analysis](KERNEL_PATCHES.md)) |
 | FMlib | Frame Manager userspace library (static) |
 | FMC | Frame Manager Configuration tool — loads PCD/PDL rules into FMan hardware |
 | sfp-led | Kernel module for SFP transceiver LED monitoring |
@@ -108,7 +108,7 @@ modules/
   ask-offload.nix            # ASK fast path (NixOS module with options)
 image/default.nix            # ext4 rootfs image builder
 pkgs/
-  kernel/                  # Patched NXP kernel + DTS + defconfig
+  kernel/                  # Patched NXP kernel + DTS + defconfig (see KERNEL_PATCHES.md)
     sdk-headers.nix        # FMan SDK driver headers (from patched kernel source)
   fmlib/                   # Frame Manager library
   fmc/                     # Frame Manager Configuration tool
