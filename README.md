@@ -31,6 +31,8 @@ nix build .#packages.aarch64-linux.cmm
 nix build .#packages.aarch64-linux.dpa-app
 ```
 
+See [BUILD_OUTPUT.md](BUILD_OUTPUT.md) for details on what gets built (image contents, services, filesystem layout).
+
 ## Flashing
 
 The rootfs image goes on eMMC partition 1. Firmware partitions (RCW, ATF, U-Boot, FMan microcode) at offsets 0-10 MB are separate and managed by the existing Yocto build. In Recovery linux, run these:
