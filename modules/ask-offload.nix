@@ -1,11 +1,13 @@
 # ASK Hardware Offload Fast Path
 # CDX, FCI, CMM, FMC, auto-bridge, dpa-app — with typed NixOS options
-{ config, lib, pkgs, ... }:
-
-let
-  cfg = config.mono-gateway.ask;
-in
 {
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
+  cfg = config.mono-gateway.ask;
+in {
   options.mono-gateway.ask = {
     enable = lib.mkEnableOption "ASK hardware offload fast path";
 
@@ -31,7 +33,7 @@ in
     ];
 
     # auto_bridge has no dependencies, load early
-    boot.kernelModules = [ "auto_bridge" ];
+    boot.kernelModules = ["auto_bridge"];
 
     # --- Conntrack tuning ---
     boot.kernel.sysctl = {
@@ -48,11 +50,11 @@ in
     # to be present (created by environment.etc / systemd-tmpfiles).
     systemd.services.load-ask-modules = {
       description = "Load ASK Fast Path Kernel Modules (CDX + FCI)";
-      after = [ "systemd-tmpfiles-setup.service" ];
-      wants = [ "systemd-tmpfiles-setup.service" ];
-      wantedBy = [ "multi-user.target" ];
-      before = [ "cmm.service" ];
-      unitConfig.ConditionPathIsDirectory = "/sys/bus/fsl-mc";
+      after = ["systemd-tmpfiles-setup.service"];
+      wants = ["systemd-tmpfiles-setup.service"];
+      wantedBy = ["multi-user.target"];
+      before = ["cmm.service"];
+      unitConfig.ConditionPathExists = "/sys/firmware/devicetree/base/cpus/fman0-extended-args";
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -66,9 +68,9 @@ in
     # --- CMM fast path daemon ---
     systemd.services.cmm = {
       description = "CMM Connection Management Module for ASK Fast Path";
-      after = [ "network.target" "load-ask-modules.service" ];
-      wants = [ "load-ask-modules.service" ];
-      wantedBy = [ "multi-user.target" ];
+      after = ["network.target" "load-ask-modules.service"];
+      wants = ["load-ask-modules.service"];
+      wantedBy = ["multi-user.target"];
       unitConfig.ConditionPathExists = "/dev/cdx_ctrl";
       serviceConfig = {
         Type = "forking";

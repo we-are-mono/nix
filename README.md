@@ -33,6 +33,22 @@ nix build .#packages.aarch64-linux.dpa-app
 
 See [BUILD_OUTPUT.md](BUILD_OUTPUT.md) for details on what gets built (image contents, services, filesystem layout).
 
+## Testing
+
+Run all build and VM checks:
+
+```bash
+nix flake check -L
+```
+
+To run only the virtualized smoke test:
+
+```bash
+nix build .#checks.x86_64-linux.gatewayVm -L
+```
+
+The smoke test boots the cross-compiled ARM64 system with the patched production kernel under QEMU. It verifies the kernel and architecture, portable network services, sysctl tuning, ASK programs and configuration files, and hardware-service gating. QEMU does not emulate the LS1046A FMan, CAAM, LEDs, fan controller, or eMMC, so those still require testing on the board.
+
 ## Flashing
 
 The rootfs image goes on eMMC partition 1. Firmware partitions (RCW, ATF, U-Boot, FMan microcode) at offsets 0-10 MB are separate and managed by the existing Yocto build. In Recovery linux, run these:
