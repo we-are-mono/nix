@@ -10,8 +10,8 @@ This document describes what the `flake.nix` builds for the Mono Gateway.
 | **Image Size** | 2.0 GB |
 | **Usable Space** | ~1.4 GB populated |
 | **Volume Name** | `NIXOS_ROOT` |
-| **NixOS Version** | 25.11 |
-| **Store Packages** | ~550 paths |
+| **NixOS Version** | 26.05 |
+| **Store Packages** | ~580 paths |
 
 ## Kernel
 
@@ -21,7 +21,7 @@ This document describes what the `flake.nix` builds for the Mono Gateway.
 | **Source** | NXP fork (`nxp-qoriq/linux`) |
 | **Architecture** | ARM64 (aarch64) |
 | **Image Size** | 17 MB (uncompressed) |
-| **Initrd Size** | 9.6 MB |
+| **Initrd Size** | 21 MB |
 
 ### Applied Patches
 

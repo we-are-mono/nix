@@ -9,8 +9,8 @@
     # address and first-boot eMMC resize are only meaningful on real hardware.
     hardware.deviceTree.name = lib.mkForce null;
     boot.kernelParams = lib.mkForce [];
-    boot.initrd.postMountCommands = lib.mkForce "";
     boot.initrd.includeDefaultModules = lib.mkOverride 5 false;
+    boot.initrd.availableKernelModules = lib.mkForce [];
     boot.initrd.kernelModules = lib.mkForce [];
     services.timesyncd.enable = lib.mkForce true;
     users.users.root.initialHashedPassword = lib.mkForce null;

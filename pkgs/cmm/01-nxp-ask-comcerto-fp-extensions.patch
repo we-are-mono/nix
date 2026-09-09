@@ -82,10 +82,11 @@ diff --git a/include/libnetfilter_conntrack/libnetfilter_conntrack.h b/include/l
 index 27d972d..919c8b0 100644
 --- a/include/libnetfilter_conntrack/libnetfilter_conntrack.h
 +++ b/include/libnetfilter_conntrack/libnetfilter_conntrack.h
-@@ -144,6 +144,20 @@ enum nf_conntrack_attr {
+@@ -144,7 +144,21 @@ enum nf_conntrack_attr {
  	ATTR_SYNPROXY_ISN = 72,			/* u32 bits */
  	ATTR_SYNPROXY_ITS,			/* u32 bits */
  	ATTR_SYNPROXY_TSOFF,			/* u32 bits */
+ 	ATTR_TIMESTAMP_EVENT,			/* u64 bits */
 +	/* NXP ASK: Comcerto fast path attributes */
 +	ATTR_ORIG_COMCERTO_FP_IIF,
 +	ATTR_ORIG_COMCERTO_FP_IFINDEX,
@@ -145,7 +146,7 @@ diff --git a/include/libnetfilter_conntrack/linux_nfnetlink_conntrack.h b/includ
 index b8ffe02..418870a 100644
 --- a/include/libnetfilter_conntrack/linux_nfnetlink_conntrack.h
 +++ b/include/libnetfilter_conntrack/linux_nfnetlink_conntrack.h
-@@ -60,6 +60,11 @@ enum ctattr_type {
+@@ -60,7 +60,12 @@ enum ctattr_type {
  	CTA_SYNPROXY,
  	CTA_FILTER,
  	CTA_STATUS_MASK,
@@ -154,6 +155,7 @@ index b8ffe02..418870a 100644
 +	CTA_LAYERSCAPE_FP_REPLY,
 +	CTA_QOSCONNMARK,
 +	CTA_QOSCONNMARK_PAD,
+ 	CTA_TIMESTAMP_EVENT,
  	__CTA_MAX
  };
  #define CTA_MAX (__CTA_MAX - 1)
@@ -340,8 +342,8 @@ diff --git a/src/conntrack/getter.c b/src/conntrack/getter.c
 index d1f9a5a..ff46725 100644
 --- a/src/conntrack/getter.c
 +++ b/src/conntrack/getter.c
-@@ -384,6 +384,72 @@ static const void *get_attr_synproxy_tsoff(const struct nf_conntrack *ct)
- 	return &ct->synproxy.tsoff;
+@@ -387,6 +387,72 @@ static const void *get_attr_timestamp_event(const struct nf_conntrack *ct)
+ 	return &ct->timestamp_event;
  }
  
 +/* NXP ASK: Comcerto fast path getters */
@@ -413,10 +415,11 @@ index d1f9a5a..ff46725 100644
  const get_attr get_attr_array[ATTR_MAX] = {
  	[ATTR_ORIG_IPV4_SRC]		= get_attr_orig_ipv4_src,
  	[ATTR_ORIG_IPV4_DST] 		= get_attr_orig_ipv4_dst,
-@@ -460,4 +526,18 @@ const get_attr get_attr_array[ATTR_MAX] = {
+@@ -531,5 +597,19 @@ const get_attr get_attr_array[ATTR_MAX] = {
  	[ATTR_SYNPROXY_ISN]		= get_attr_synproxy_isn,
  	[ATTR_SYNPROXY_ITS]		= get_attr_synproxy_its,
  	[ATTR_SYNPROXY_TSOFF]		= get_attr_synproxy_tsoff,
+ 	[ATTR_TIMESTAMP_EVENT]		= get_attr_timestamp_event,
 +	/* NXP ASK: Comcerto fast path and QoS */
 +	[ATTR_ORIG_COMCERTO_FP_IIF]		= get_attr_orig_comcerto_fp_iif,
 +	[ATTR_ORIG_COMCERTO_FP_IFINDEX]		= get_attr_orig_comcerto_fp_ifindex,

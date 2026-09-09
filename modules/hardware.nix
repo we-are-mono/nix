@@ -1,8 +1,11 @@
 # Board-specific hardware configuration for Mono Gateway DK (LS1046A)
 # Boot, kernel, DTB, eMMC tuning, serial console, fancontrol, watchdog
-{ config, lib, pkgs, ... }:
-
 {
+  config,
+  lib,
+  pkgs,
+  ...
+}: {
   # --- Boot ---
   boot.loader.generic-extlinux-compatible.enable = true;
   boot.loader.grub.enable = false;
@@ -14,15 +17,25 @@
 
   # Embedded board: all boot-critical drivers are built-in, no default x86 modules
   boot.initrd.includeDefaultModules = false;
-  boot.initrd.availableKernelModules = [ ];
+  boot.initrd.availableKernelModules = [];
+  boot.initrd.systemd.tpm2.enable = false;
+  # systemd 260 otherwise carries this active oneshot across switch-root,
+  # preventing stage 2 from applying the real-root sysctl configuration.
+  boot.initrd.systemd.services.systemd-sysctl.serviceConfig.RemainAfterExit = false;
 
   # Grow root filesystem to fill eMMC partition on first boot
-  boot.initrd.extraUtilsCommands = ''
-    copy_bin_and_libs ${pkgs.e2fsprogs}/sbin/resize2fs
-  '';
-  boot.initrd.postMountCommands = ''
-    resize2fs /dev/mmcblk0p1 || true
-  '';
+  boot.initrd.systemd.extraBin.resize2fs = "${pkgs.e2fsprogs}/bin/resize2fs";
+  boot.initrd.systemd.services.resize-root = {
+    description = "Grow the root filesystem to fill the eMMC partition";
+    wantedBy = ["initrd-root-fs.target"];
+    after = ["sysroot.mount"];
+    before = ["initrd-root-fs.target"];
+    unitConfig.ConditionPathExists = "/dev/mmcblk0p1";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "/bin/resize2fs /dev/mmcblk0p1";
+    };
+  };
 
   # Explicit DTB for extlinux.conf FDT entry
   hardware.deviceTree.name = "freescale/mono-gateway-dk-sdk.dtb";
@@ -32,8 +45,8 @@
     device = "/dev/mmcblk0p1";
     fsType = "ext4";
     options = [
-      "noatime"    # no access-time writes — biggest single win for eMMC
-      "commit=60"  # flush journal every 60s instead of 5s — coalesces writes
+      "noatime" # no access-time writes — biggest single win for eMMC
+      "commit=60" # flush journal every 60s instead of 5s — coalesces writes
     ];
   };
 
@@ -41,7 +54,7 @@
   systemd.services."serial-getty@ttyS0" = {
     enable = true;
     serviceConfig.ExecStart = [
-      ""  # clear the default
+      "" # clear the default
       "@${pkgs.util-linux}/sbin/agetty agetty --autologin root --noclear 115200 ttyS0 vt100"
     ];
   };
